@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package shimmer.protobuf;
+
+message InvalidateNode {
+    uint64 key = 1;
+}

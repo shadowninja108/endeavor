@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package shimmer.protobuf;
+
+message SelectNode {
+    uint64 key = 1;
+    string label = 2; /* TODO: better name? */
+}

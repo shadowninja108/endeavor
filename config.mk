@@ -7,10 +7,10 @@
 LOAD_KIND := Module
 
 # Program you're targetting. Used to determine where to deploy your files.
-PROGRAM_ID := 0100801011c3e000
+PROGRAM_ID := 01003BC0000A0000
 
 # Optional path to copy the final ELF to, for convenience.
-ELF_EXTRACT :=
+ELF_EXTRACT := /mnt/c/Users/shado/Downloads/endeavor.elf
 
 # Python command to use. Must be Python 3.4+.
 PYTHON := python3
@@ -19,8 +19,8 @@ PYTHON := python3
 NPDM_JSON := qlaunch.json
 
 # Additional C/C++ flags to use.
-C_FLAGS := 
-CXX_FLAGS := 
+C_FLAGS := -Wall -Werror -O3 -DNNSDK
+CXX_FLAGS := -Wno-invalid-offsetof
 
 # AsRtld settings
 #------------------------

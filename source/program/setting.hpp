@@ -2,7 +2,7 @@
 
 #include "common.hpp"
 
-#define EXL_MODULE_NAME "exlaunch"
+#define EXL_MODULE_NAME "endeavor"
 
 #define EXL_DEBUG
 #define EXL_USE_FAKEHEAP
@@ -16,7 +16,7 @@ namespace exl::setting {
     constexpr size_t HeapSize = 0x5000;
 
     /* How large the JIT area will be for hooks. */
-    constexpr size_t JitSize = 0x1000;
+    constexpr size_t JitSize = 0x2000;
 
     /* How large the area will be inline hook pool. */
     constexpr size_t InlinePoolSize = 0x1000;

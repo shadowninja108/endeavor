@@ -8,7 +8,7 @@ namespace exl::util {
     enum class UserVersion {
         DEFAULT,
         /* Members can be assigned any constant of your choosing. */
-        /* OTHER = 123 */
+        OTHER = 123
     };
 
     namespace impl {

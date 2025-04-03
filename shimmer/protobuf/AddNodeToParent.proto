@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package shimmer.protobuf;
+
+message AddNodeToParent {
+    uint64 key = 1;
+    uint64 parentKey = 2;
+    string label = 3;
+    optional string meta = 4;
+}

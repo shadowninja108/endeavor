@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package shimmer.protobuf;
+
+message AddNodeToRoot {
+    uint64 key = 1;
+    string label = 2;
+    optional string meta = 3;
+}

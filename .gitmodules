@@ -1,0 +1,3 @@
+[submodule "ext/EmbeddedProto"]
+	path = ext/EmbeddedProto
+	url = https://github.com/Embedded-AMS/EmbeddedProto.git

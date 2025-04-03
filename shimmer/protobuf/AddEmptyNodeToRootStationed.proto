@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package shimmer.protobuf;
+
+message AddEmptyNodeToRootStationed {
+    string label = 1;
+    optional string meta = 2;
+}
