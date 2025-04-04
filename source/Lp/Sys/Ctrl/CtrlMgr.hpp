@@ -29,6 +29,7 @@ namespace Lp::Sys {
         int field_3D8;
 
         void createCtrl(sead::ControllerMgr*);
+        void changeCtrlJoy_(int ctrlType, int ctrlId);
 
         /* TODO: macro for this. */
         static CtrlMgr* sInstance;

@@ -14,6 +14,7 @@
 #include <Lp/Sys/Debug/DbgTextWriter.hpp>
 #include <Lp/Sys/Debug/DbgCameraMgr.hpp>
 #include <Lp/Sys/FileDeviceHolder.hpp>
+#include <Lp/Sys/Ctrl/CtrlMgr.hpp>
 #include <Lp/Utl/Math.hpp>
 #include <Lp/Utl/Scene.hpp>
 #include <Lp/Utl/Layer.hpp>
@@ -47,6 +48,7 @@
 #include <Blitz/Game/Actor/Obj.hpp>
 #include <Blitz/Game/Actor/Field.hpp>
 #include <Blitz/Game/Actor/Lift.hpp>
+#include <Blitz/Game/Actor/BulletMgr.hpp>
 #include <Blitz/Game/FilmingSupporter.hpp>
 #include <Blitz/Game/Actor/MainMgr.hpp>
 #include <Blitz/Scene/Viewer/BlitzViewer.hpp>
@@ -465,10 +467,11 @@ HOOK_DEFINE_TRAMPOLINE(MainMgrEnter) {
         Orig(self);
         if(sFilmingSupporter == nullptr) {
             sead::ScopedCurrentHeapSetter heap(endv::heap::Get<endv::HeapGroupDbgHeapKey>());
-            sFilmingSupporter = new Game::FilmingSupporter();
-            sFilmingSupporter->enter();
 
             sIsFixedAim = false;
+
+            sFilmingSupporter = new Game::FilmingSupporter();
+            sFilmingSupporter->enter();
 
             auto page = Cmn::FindOrCreateDbgMenuPage(sead::SafeString("Filming"), true);
             page->addItem(
@@ -619,7 +622,7 @@ HOOK_DEFINE_TRAMPOLINE(ModelArcCheckIfResModel) {
 
 HOOK_DEFINE_INLINE(FieldLoadModerArcPtr) {
     static void Callback(exl::hook::InlineCtx* ctx) {
-        Cmn::ActorDBData* actorDBData = reinterpret_cast<Cmn::ActorDBData*>(ctx->X[26]);
+        Cmn::ActorDBData* actorDBData = reinterpret_cast<Cmn::ActorDBData*>(ctx->X[1] - 0xB8);
         if( !Lp::Sys::ModelArc::checkResExist(actorDBData->mResName)){
             Logging.Log("Missing Field: %s", actorDBData->mResName.mStringTop);
             const char *name = (actorDBData->mResName == "TestField1150") ? "Fld_Ditch01" : "Fld_Room_Gear";
@@ -646,6 +649,18 @@ HOOK_DEFINE_INLINE(CollisionFix) {
     static void Callback(exl::hook::InlineCtx* ctx) {
         Game::Lift* obj = reinterpret_cast<Game::Lift*>(ctx->X[19]);
         if(obj->getBlock(0) == nullptr) ctx->W[0] = 0;
+    }
+};
+
+HOOK_DEFINE_INLINE(BulletMgrCreateActorsRocketFix) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        *reinterpret_cast<int*>(ctx->X[29] - 0x4A0 + 0x2E4) = 1;
+    }
+};
+
+HOOK_DEFINE_TRAMPOLINE(CtrlMgrChangeCtrlJoy) {
+    static void Callback(Lp::Sys::CtrlMgr* self, int ctrlType, int ctrlId) {
+        Orig(self, ctrlType, (ctrlId <= 8 ? ctrlId : 0));
     }
 };
 
@@ -873,18 +888,29 @@ extern "C" void exl_main(void* x0, void* x1) {
     endv::hooks::shimmer::Install();
     endv::hooks::nvn::Install();
 
+    /* Hooks for FixedAim and FilmingSupporter*/
     LayerGetCamera::InstallAtFuncPtr(&agl::lyr::Layer::getRenderCamera);
     MainMgrEnter::InstallAtFuncPtr(&Game::MainMgr::enter);
     MainMgrCalcGameFrame::InstallAtFuncPtr(&Game::MainMgr::calcGameFrame);
     MainMgrExit::InstallAtFuncPtr(&Game::MainMgr::exit);
+
     CameraAnimResourceLoad::InstallAtFuncPtr(&Cmn::CameraAnimResource::loadImpl);
     LpDbgTextWriterEntry::InstallAtFuncPtr(&Lp::Sys::DbgTextWriter::entryCmn);
+
+    /* Hooks for missing model replacement */
     void (Lp::Sys::ModelArc::*modelArcLoadPtr)(sead::SafeString const&, sead::Heap*, sead::Heap*, bool, gsys::ModelResource::CreateArg const*) = &Lp::Sys::ModelArc::load;
     ModelArcInit::InstallAtFuncPtr(modelArcLoadPtr);
     ModelArcCheckIfResModel::InstallAtFuncPtr(&Lp::Sys::ModelArc::checkIfResModel);
     FieldLoadModerArcPtr::InstallAtPtr(reinterpret_cast<uintptr_t>(reinterpret_cast< void (*)(Game::Field*)>(&Game::Field::loadModelArc)) + 0x1DC);
     ObjCreateModelArc::InstallAtPtr(reinterpret_cast<uintptr_t>(reinterpret_cast< void (*)(Game::Obj*)>(&Game::Obj::createModelAndAnim_)) + 0x180);
     CollisionFix::InstallAtPtr(reinterpret_cast<uintptr_t>(reinterpret_cast< void (*)(Game::Lift*)>(&Game::Lift::reset_)) + 0x148);
+    
+    /* Hook to fix rocket bullets not being spawned*/
+    BulletMgrCreateActorsRocketFix::InstallAtPtr(reinterpret_cast<uintptr_t>(reinterpret_cast< void (*)(Game::BulletMgr*)>(&Game::BulletMgr::createActors)) + 0x4048);
+    
+    /* Hook to fix controller disconnect crashing the game due to assert. */
+    CtrlMgrChangeCtrlJoy::InstallAtFuncPtr(&Lp::Sys::CtrlMgr::changeCtrlJoy_);
+
     // f1(nullptr);
     // f2(nullptr);
     // f3(nullptr);

@@ -155,11 +155,11 @@ namespace endv::hooks::core {
         p.Seek(reinterpret_cast<uintptr_t>(reinterpret_cast<void(*)(Lp::Sys::DbgMode*)>(&Lp::Sys::DbgMode::calcChangeMode)) + 0x28 - base);
         p.WriteInst(exl::armv8::inst::Nop());
         /* Don't allow Lp to override sead's DebugMenu controller. TODO: should be easy to work around. */
-        p.Seek(reinterpret_cast<uintptr_t>(reinterpret_cast<void(*)(Lp::Sys::Framework*, sead::TaskBase*)>(&Lp::Sys::Framework::createControllerMgr)) + 0x230 - base);
+        p.Seek(reinterpret_cast<uintptr_t>(reinterpret_cast<void(*)(Lp::Sys::Framework*, sead::TaskBase*)>(&Lp::Sys::Framework::createSeadMenuMgr)) + 0x230 - base);
         p.WriteInst(exl::armv8::inst::Nop());
         /* Skip abort related to lift collision for model auto fixer*/
-        p.Seek(reinterpret_cast<uintptr_t>(reinterpret_cast<void(*)(Game::Lift*)>(&Game::Lift::load_)) + 0xF24 - base);
-        p.WriteInst(exl::armv8::inst::Nop());
+        p.Seek(reinterpret_cast<uintptr_t>(reinterpret_cast<void(*)(Game::Lift*)>(&Game::Lift::load_)) + 0xF20 - base);
+        p.Write<uint>(0x52800028); // works for both builds
 
         /* Stub out debug-only nnSdk things. */
         NnOeGetLaunchStorageInfo::InstallAtFuncPtr(&nn::oe::GetLaunchStorageInfoForDebug);
