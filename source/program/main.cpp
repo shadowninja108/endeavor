@@ -12,6 +12,7 @@
 #include <Lp/Sys/Scene/SceneMgr.hpp>
 #include <Lp/Sys/Model/ModelArc.hpp>
 #include <Lp/Sys/Debug/DbgTextWriter.hpp>
+#include <Lp/Sys/Debug/DbgCameraMgr.hpp>
 #include <Lp/Sys/FileDeviceHolder.hpp>
 #include <Lp/Utl/Math.hpp>
 #include <Lp/Utl/Scene.hpp>
@@ -43,6 +44,11 @@
 #include <Blitz/Game/GfxMgr.hpp>
 #include <Blitz/Game/Paint/PaintMgr.hpp>
 #include <Blitz/Game/Paint/PaintTextureArchiver.hpp>
+#include <Blitz/Game/Actor/Obj.hpp>
+#include <Blitz/Game/Actor/Field.hpp>
+#include <Blitz/Game/Actor/Lift.hpp>
+#include <Blitz/Game/FilmingSupporter.hpp>
+#include <Blitz/Game/Actor/MainMgr.hpp>
 #include <Blitz/Scene/Viewer/BlitzViewer.hpp>
 #include <Blitz/Scene/Viewer/EnemyObjViewer.hpp>
 #include <Blitz/Scene/IconCapture.hpp>
@@ -64,7 +70,6 @@
 
 #include <elua/GlueStaticFunction.hpp>
 #include <elua/GlueClassMemberFunction.hpp>
-
 
 // HOOK_DEFINE_INLINE(DbgSettingSceneFix) {
 //     static void Callback(exl::hook::InlineCtx* ctx) {
@@ -449,6 +454,96 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
     }
 };
 
+static Game::FilmingSupporter* sFilmingSupporter;
+static bool sIsFixedAim = false;
+
+HOOK_DEFINE_TRAMPOLINE(MainMgrEnter) {
+    static void OnAimModeChanged() {
+        if(sFilmingSupporter) sFilmingSupporter->changeMode_(sIsFixedAim ? Game::FilmingSupporter::AimMode_FixedAim : Game::FilmingSupporter::AimMode_None);
+    }
+    static void Callback(Game::MainMgr* self) {
+        Orig(self);
+        if(sFilmingSupporter == nullptr) {
+            sead::ScopedCurrentHeapSetter heap(endv::heap::Get<endv::HeapGroupDbgHeapKey>());
+            sFilmingSupporter = new Game::FilmingSupporter();
+            sFilmingSupporter->enter();
+
+            sIsFixedAim = false;
+
+            auto page = Cmn::FindOrCreateDbgMenuPage(sead::SafeString("Filming"), true);
+            page->addItem(
+                Cmn::DbgMenuItemBool::Create(
+                    sead::SafeString("[Endeavor] FixedAim"),
+                    sIsFixedAim,
+                    OnAimModeChanged
+                )
+            );
+            page->addItem(
+                Cmn::DbgMenuItemValue::Create<int>(
+                    sead::SafeString("[Endeavor] Focus Player"),
+                    sFilmingSupporter->mPlayerId,
+                    -1,
+                    9
+                )
+            );
+        }
+    }
+};
+
+HOOK_DEFINE_TRAMPOLINE(MainMgrCalcGameFrame) {
+    static void Callback(Game::MainMgr* self) {
+        if(sFilmingSupporter != nullptr) {
+            sFilmingSupporter->calc();
+            if(sIsFixedAim) {
+                int i = Cmn::GfxUtl::getGfxMgr()->getLyrIdx_3D_Main();
+                auto mgr = Lp::Sys::DbgCameraMgr::sInstance;
+                if(mgr->mLayerNum > i && mgr->mLayerCameras[i] != nullptr) {
+                    mgr->mLayerCameras[i]->calc(true);
+                }
+            }
+        }
+        Orig(self);
+    }
+};
+
+HOOK_DEFINE_TRAMPOLINE(MainMgrExit) {
+    static void deleteItem(Cmn::DbgMenuPage* page, sead::SafeString const& name) {
+        auto item = page->findItem(name, true);
+        page->removeItem(item);
+    }
+    static void Callback(Game::MainMgr* self) {
+        if(sFilmingSupporter != nullptr) {
+            sead::ScopedCurrentHeapSetter heap(endv::heap::Get<endv::HeapGroupDbgHeapKey>());
+
+            // Additional cleanup since dtor is not present
+            auto page = Cmn::FindOrCreateDbgMenuPage(sead::SafeString("Filming"), true);
+            deleteItem(page, sead::SafeString("Clear"));
+            deleteItem(page, sead::SafeString("Hide Layout"));
+            deleteItem(page, sead::SafeString("Hide ShotGuide"));
+            deleteItem(page, sead::SafeString("Hide DbgDraw"));
+            deleteItem(page, sead::SafeString("[Endeavor] FixedAim"));
+            deleteItem(page, sead::SafeString("[Endeavor] Focus Player"));
+
+            delete sFilmingSupporter;
+            sFilmingSupporter = nullptr;
+
+            sIsFixedAim = false;
+
+        }
+        Orig(self);
+    }
+};
+
+HOOK_DEFINE_TRAMPOLINE(LayerGetCamera) {
+    static sead::Camera* Callback(const agl::lyr::Layer* layer) {
+         if(sIsFixedAim && sFilmingSupporter && layer->mId == Cmn::GfxUtl::getGfxMgr()->getLyrIdx_3D_Main()) {
+            auto mgr = Lp::Sys::DbgCameraMgr::sInstance;
+            int i = layer->mId;
+            if(mgr->mLayerNum > i && mgr->mLayerCameras[i] != nullptr) return &mgr->mLayerCameras[i]->mCamera;
+        }
+        return Orig(layer);
+    }
+};
 HOOK_DEFINE_TRAMPOLINE(LpDbgTextWriterEntry) {
 
     /* TODO: resolve via symbol. */
@@ -506,16 +601,51 @@ HOOK_DEFINE_TRAMPOLINE(ModelArcInit) {
         if(Lp::Sys::ModelArc::checkResExist(name))
             return Orig(self, name, heap1, heap2, unk, arg);
 
-
+        Logging.Log("Missing Model: %s", name.mStringTop);
         auto altName = name;
-        altName.mStringTop = "Model/TestField00.Nin_NX_NVN.szs";
+        altName.mStringTop = "Obj_Box00S";
         return Orig(self, altName, heap1, heap2, unk, arg);
-        // endv::StackTraceIterator it;
-        // while(it.IsValid()) {
-            
-        //     it.Step();
-        // }
         
+    }
+};
+
+HOOK_DEFINE_TRAMPOLINE(ModelArcCheckIfResModel) {
+    static bool Callback(sead::SafeStringBase<char> const&archiveName, sead::SafeStringBase<char> const&resName) {
+        if(!Lp::Sys::ModelArc::checkResExist(archiveName))
+            return false;
+        return Orig(archiveName, resName);
+    }
+};
+
+HOOK_DEFINE_INLINE(FieldLoadModerArcPtr) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        Cmn::ActorDBData* actorDBData = reinterpret_cast<Cmn::ActorDBData*>(ctx->X[26]);
+        if( !Lp::Sys::ModelArc::checkResExist(actorDBData->mResName)){
+            Logging.Log("Missing Field: %s", actorDBData->mResName.mStringTop);
+            const char *name = (actorDBData->mResName == "TestField1150") ? "Fld_Ditch01" : "Fld_Room_Gear";
+            actorDBData->mResName = sead::SafeString(name);
+            actorDBData->mJmpName = sead::SafeString(name);
+            actorDBData->mFmdbName = sead::SafeString(name);
+            actorDBData->mLinkUserName = sead::SafeString(name);
+        }
+    }
+};
+
+HOOK_DEFINE_INLINE(ObjCreateModelArc) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        sead::SafeString* resName = reinterpret_cast<sead::SafeString*>(ctx->X[1]);
+        if( !Lp::Sys::ModelArc::checkResExist(*resName)){
+            Logging.Log("Missing Obj: %s", resName->mStringTop);
+            *resName = sead::SafeString("Obj_Box00S");
+            *reinterpret_cast<sead::SafeString*>(ctx->X[2]) = sead::SafeString("Obj_Box00S");
+        }
+    }
+};
+
+HOOK_DEFINE_INLINE(CollisionFix) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        Game::Lift* obj = reinterpret_cast<Game::Lift*>(ctx->X[19]);
+        if(obj->getBlock(0) == nullptr) ctx->W[0] = 0;
     }
 };
 
@@ -743,10 +873,18 @@ extern "C" void exl_main(void* x0, void* x1) {
     endv::hooks::shimmer::Install();
     endv::hooks::nvn::Install();
 
-    // CameraAnimResourceLoad::InstallAtFuncPtr(&Cmn::CameraAnimResource::loadImpl);
+    LayerGetCamera::InstallAtFuncPtr(&agl::lyr::Layer::getRenderCamera);
+    MainMgrEnter::InstallAtFuncPtr(&Game::MainMgr::enter);
+    MainMgrCalcGameFrame::InstallAtFuncPtr(&Game::MainMgr::calcGameFrame);
+    MainMgrExit::InstallAtFuncPtr(&Game::MainMgr::exit);
+    CameraAnimResourceLoad::InstallAtFuncPtr(&Cmn::CameraAnimResource::loadImpl);
     LpDbgTextWriterEntry::InstallAtFuncPtr(&Lp::Sys::DbgTextWriter::entryCmn);
-    // ModelArcInit::InstallAtFuncPtr(&Lp::Sys::ModelArc::load);
-
+    void (Lp::Sys::ModelArc::*modelArcLoadPtr)(sead::SafeString const&, sead::Heap*, sead::Heap*, bool, gsys::ModelResource::CreateArg const*) = &Lp::Sys::ModelArc::load;
+    ModelArcInit::InstallAtFuncPtr(modelArcLoadPtr);
+    ModelArcCheckIfResModel::InstallAtFuncPtr(&Lp::Sys::ModelArc::checkIfResModel);
+    FieldLoadModerArcPtr::InstallAtPtr(reinterpret_cast<uintptr_t>(reinterpret_cast< void (*)(Game::Field*)>(&Game::Field::loadModelArc)) + 0x1DC);
+    ObjCreateModelArc::InstallAtPtr(reinterpret_cast<uintptr_t>(reinterpret_cast< void (*)(Game::Obj*)>(&Game::Obj::createModelAndAnim_)) + 0x180);
+    CollisionFix::InstallAtPtr(reinterpret_cast<uintptr_t>(reinterpret_cast< void (*)(Game::Lift*)>(&Game::Lift::reset_)) + 0x148);
     // f1(nullptr);
     // f2(nullptr);
     // f3(nullptr);

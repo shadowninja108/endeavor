@@ -63,6 +63,7 @@ namespace agl::lyr {
         virtual bool isForceInvisible() const;
         virtual bool isForceDisableClear() const;
         virtual void calcJobWeight();
+        sead::Camera* getRenderCamera() const;
 
         // TODO: go into gsys::Layer
         // virtual void doInitialize(sead::Heap*);

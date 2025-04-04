@@ -2,6 +2,7 @@
 
 #include <sead/heap/seadHeap.h>
 #include <sead/math/seadVector.hpp>
+#include <agl/DrawContext.hpp>
 
 namespace gsys {
     
@@ -41,5 +42,7 @@ namespace gsys {
 
             virtual ~CreateArg();
         };
+
+        agl::DrawContext* invokeDrawTV_(agl::DrawContext *drawContext);
     };
 }

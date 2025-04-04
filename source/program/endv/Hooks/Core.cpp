@@ -4,10 +4,15 @@
 
 #include <Lp/Sys/Task/RootTask.hpp>
 #include <Lp/Sys/SysInit.hpp>
+#include <Lp/Sys/Framework.hpp>
+#include <Lp/Sys/Debug/DbgMode.hpp>
 #include <Lp/Sys/Ctrl/CtrlMgr.hpp>
 #include <Lp/Sys/Ctrl/Ctrl.hpp>
 #include <Lp/Sys/Ctrl/CtrlType.hpp>
 #include <Lp/Sys/Ctrl/DbgMixCtrl.hpp>
+#include <Lp/Sys/Framework.hpp>
+#include <Lp/Sys/Assert.hpp>
+#include <Lp/Sys/Debug/DbgMode.hpp>
 #include <Lp/Sys/HeapGroup.hpp>
 
 #include <sead/devenv/seadGameConfig.h>
@@ -15,7 +20,7 @@
 
 #include <Blitz/Cmn/Gfx/PBRMgr.hpp>
 #include <Blitz/Cmn/ViewerEnvChanger.hpp>
-
+#include <Blitz/Game/Actor/Lift.hpp>
 
 #include "../Heap.hpp"
 #include "../../shimmer/client.hpp"
@@ -140,15 +145,20 @@ namespace endv::hooks::core {
     };
 
     void Install() {
-        exl::patch::CodePatcher p(0x01207DC4);
+        uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
+
+        exl::patch::CodePatcher p(0x0);
         /* Suppress abort WarningMgr. TODO: work around this. */
-        p.Seek(0x016734B4);
+        p.Seek(reinterpret_cast<uintptr_t>(&Lp::Sys::cpWarning) + 0x1CC - base);
         p.WriteInst(exl::armv8::inst::Nop());
         /* Disable - button for Lp's debug menu. TODO: better solution? */
-        p.Seek(0x0168FAC4);
+        p.Seek(reinterpret_cast<uintptr_t>(reinterpret_cast<void(*)(Lp::Sys::DbgMode*)>(&Lp::Sys::DbgMode::calcChangeMode)) + 0x28 - base);
         p.WriteInst(exl::armv8::inst::Nop());
         /* Don't allow Lp to override sead's DebugMenu controller. TODO: should be easy to work around. */
-        p.Seek(0x01674D7C);
+        p.Seek(reinterpret_cast<uintptr_t>(reinterpret_cast<void(*)(Lp::Sys::Framework*, sead::TaskBase*)>(&Lp::Sys::Framework::createControllerMgr)) + 0x230 - base);
+        p.WriteInst(exl::armv8::inst::Nop());
+        /* Skip abort related to lift collision for model auto fixer*/
+        p.Seek(reinterpret_cast<uintptr_t>(reinterpret_cast<void(*)(Game::Lift*)>(&Game::Lift::load_)) + 0xF24 - base);
         p.WriteInst(exl::armv8::inst::Nop());
 
         /* Stub out debug-only nnSdk things. */

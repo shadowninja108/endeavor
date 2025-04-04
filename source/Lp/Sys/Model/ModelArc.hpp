@@ -21,5 +21,6 @@ namespace Lp::Sys {
 
         static void getFullPath(sead::FixedSafeString<256>*, sead::SafeString const&);
         static bool checkResExist(sead::SafeString const&);
+        static bool checkIfResModel(sead::SafeStringBase<char> const&archiveName, sead::SafeStringBase<char> const&resName);
     };
 }

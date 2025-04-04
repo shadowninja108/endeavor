@@ -22,7 +22,7 @@ namespace Game {
         Cmn::KDGndCol::BlockKCol* mKCol;
         /* ... */
 
-        void initByMuData()
+        void initByMuData();
         void loadModelArc();
     };
 }

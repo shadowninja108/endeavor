@@ -9,6 +9,7 @@ namespace Cmn {
 
         DbgMenuPage *mPage;
         
+        DbgMenuItemPage(sead::SafeString const&);
         virtual ~DbgMenuItemPage();
         virtual void reset();
         virtual void makeValueString(sead::BufferedSafeString&);

@@ -28,7 +28,7 @@ namespace Cmn {
         bool addItem(DbgMenuItem*);
         DbgMenuItem* findItem(uint, bool) const;
         void removeItem(DbgMenuItem*);
-        DbgMenuItem* findItem(sead::SafeString const&, bool);
+        DbgMenuItem* findItem(sead::SafeString const&, bool) const;
         DbgMenuPage* findPage(sead::SafeString const&, bool);
         void calc_();
         void draw_(agl::lyr::RenderInfo const&);
