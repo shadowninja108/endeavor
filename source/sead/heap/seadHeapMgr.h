@@ -20,6 +20,7 @@ public:
     static bool isContainedInAnyHeap(const void* ptr);
 
     static HeapMgr* instance() { return sInstancePtr; }
+    static sead::Heap* getRootHeap(s32 index) { return sRootHeaps[index]; }
     static s32 getRootHeapNum() { return sRootHeaps.size(); }
 
     // TODO: these should be private

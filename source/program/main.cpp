@@ -292,10 +292,18 @@ static void PrintParam(const Lp::Sys::ParamNode* node) {
 }
 
 
-namespace endv { struct HeapGroupDbgHeapKey; }
+namespace endv { 
+    struct HeapGroupDbgHeapKey;
+    struct HeapGroupDbgHeapKeyProd;
+    sead::Heap *getDbgHeap() {
+        return endv::heap::s_IsProd ? 
+            endv::heap::Get<endv::HeapGroupDbgHeapKeyProd>() : 
+            endv::heap::Get<endv::HeapGroupDbgHeapKey>();
+    }
+}
 
 HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
-    inline static bool s_EnableDbgTextWriter;
+    inline static bool s_EnableDbgTextWriter = true;
     static void OnEnableDbgTextWriterChanged() {
         if(s_EnableDbgTextWriter) {
             Logging.Log("Enabling DbgTextWriter...");
@@ -303,6 +311,24 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
         } else {
             Logging.Log("Disabling DbgTextWriter...");
             //SEAD_INSTANCE(Lp::Sys::DbgTextWriter)->pauseDraw(false);
+        }
+    }
+
+    inline static bool s_EnablePlayerViewerBlueBG = false;
+    static void OnEnablePlayerViewerBlueBGChanged() {
+        if(s_EnablePlayerViewerBlueBG) {
+            Logging.Log("Enabling PlayerViewer Blue BG...");
+        } else {
+            Logging.Log("Disabling PlayerViewer Blue BG...");
+        }
+    }
+
+    inline static bool s_UseShopForFieldFix = false;
+    static void OnUseShopForFieldFixChanged() {
+        if(s_UseShopForFieldFix) {
+            Logging.Log("Enabling Use Shop For Field Fix...");
+        } else {
+            Logging.Log("Disabling Use Shop For Field Fix...");
         }
     }
 
@@ -374,14 +400,14 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
         formatter.endHash();
     }
 
-    static void Callback(Cmn::CameraAnimResource* self, Lp::Sys::ModelArc* arc, sead::SafeString const& str1, sead::SafeString const* str2, int a, bool b) {
+    static bool Callback(Cmn::CameraAnimResource* self, Lp::Sys::ModelArc* arc, sead::SafeString const& str1, sead::SafeString const* str2, int a, bool b) {
         Logging.Log("Cmn::CameraAnimResourceLoad::loadImpl");
         endv::LogStackTrace();
 
         auto gfxMgr = reinterpret_cast<Game::GfxMgr*>(Cmn::GfxUtl::getGfxMgr());
         auto fieldEnvSet = gfxMgr->mFieldEnvSet;
         if(fieldEnvSet != nullptr) {
-            PrintParam(fieldEnvSet);
+            //PrintParam(fieldEnvSet);
         }
         /* TODO: fix sead RTTI... */
         // Logging.Log("Hour: %d", static_cast<int>(sead::DynamicCast<Cmn::SceneBase>(Lp::Utl::getCurScene())->mGfxMgr->mHour));
@@ -391,7 +417,7 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
         //     Logging.Log("%s", str1.cstr());
         // Orig(self, arc, str1, str2, a, b);
 
-        sead::ScopedCurrentHeapSetter heap(endv::heap::Get<endv::HeapGroupDbgHeapKey>());
+        sead::ScopedCurrentHeapSetter heap(endv::getDbgHeap());
         static int ivalue = 420;
         static float fvalue = 69;
         static bool init = false;
@@ -446,13 +472,30 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
                 )
             );
             page->addItem(
+                Cmn::DbgMenuItemBool::Create(
+                    sead::SafeString("PlayerViewer Blue BG"),
+                    s_EnablePlayerViewerBlueBG,
+                    OnEnablePlayerViewerBlueBGChanged
+                )
+            );
+            if(!Lp::Sys::ModelArc::checkResExist("TestfieldDummy00")){
+                s_UseShopForFieldFix = true; // default to shop if a replacement field is not found.
+            }
+            page->addItem(
+                Cmn::DbgMenuItemBool::Create(
+                    sead::SafeString("Use Shop For Field Fix"),
+                    s_UseShopForFieldFix,
+                    OnUseShopForFieldFixChanged
+                )
+            );
+            page->addItem(
                 Cmn::DbgMenuItemPush::Create(
                     sead::SafeString("Capture"),
                     OnCapture
                 )
             );
         }
-        Orig(self, arc, str1, str2, a, b);
+        return Orig(self, arc, str1, str2, a, b);
     }
 };
 
@@ -466,7 +509,7 @@ HOOK_DEFINE_TRAMPOLINE(MainMgrEnter) {
     static void Callback(Game::MainMgr* self) {
         Orig(self);
         if(sFilmingSupporter == nullptr) {
-            sead::ScopedCurrentHeapSetter heap(endv::heap::Get<endv::HeapGroupDbgHeapKey>());
+            sead::ScopedCurrentHeapSetter heap(endv::getDbgHeap());
 
             sIsFixedAim = false;
 
@@ -516,7 +559,7 @@ HOOK_DEFINE_TRAMPOLINE(MainMgrExit) {
     }
     static void Callback(Game::MainMgr* self) {
         if(sFilmingSupporter != nullptr) {
-            sead::ScopedCurrentHeapSetter heap(endv::heap::Get<endv::HeapGroupDbgHeapKey>());
+            sead::ScopedCurrentHeapSetter heap(endv::getDbgHeap());
 
             // Additional cleanup since dtor is not present
             auto page = Cmn::FindOrCreateDbgMenuPage(sead::SafeString("Filming"), true);
@@ -625,7 +668,7 @@ HOOK_DEFINE_INLINE(FieldLoadModerArcPtr) {
         Cmn::ActorDBData* actorDBData = reinterpret_cast<Cmn::ActorDBData*>(ctx->X[1] - 0xB8);
         if( !Lp::Sys::ModelArc::checkResExist(actorDBData->mResName)){
             Logging.Log("Missing Field: %s", actorDBData->mResName.mStringTop);
-            const char *name = (actorDBData->mResName == "TestField1150") ? "Fld_Ditch01" : "Fld_Room_Gear";
+            const char *name = (CameraAnimResourceLoad::s_UseShopForFieldFix) ? "Fld_Room_Gear" : "TestfieldDummy00";
             actorDBData->mResName = sead::SafeString(name);
             actorDBData->mJmpName = sead::SafeString(name);
             actorDBData->mFmdbName = sead::SafeString(name);
@@ -666,9 +709,20 @@ HOOK_DEFINE_TRAMPOLINE(CtrlMgrChangeCtrlJoy) {
 
 namespace endv {
 
+    namespace heap { 
+        bool s_IsProd = false;
+    }
+
+    /* Heap Configuration. We use less ram for prod to fit in 4gb.*/
     struct HeapGroupDbgHeapKey {
         static constexpr char Name[] = "HeapGroup::cDbg";
         static constexpr size_t Size = 0xA00'0000;
+        static constexpr size_t Alignment = 0;
+    };
+
+    struct HeapGroupDbgHeapKeyProd {
+        static constexpr char Name[] = "HeapGroup::cDbg";
+        static constexpr size_t Size = 0x280'0000;
         static constexpr size_t Alignment = 0;
     };
 
@@ -678,21 +732,37 @@ namespace endv {
         static constexpr size_t Alignment = 0;
     };
 
+    struct SceneDbgHeapKeyProd {
+        static constexpr char Name[] = "SceneDbgHeap";
+        static constexpr size_t Size = 0xA0'0000;
+        static constexpr size_t Alignment = 0;
+    };
+
     void OnCreateScene(Lp::Sys::Scene* scene) {
-        /* Populate DbgHeap for the scene. */
-        Lp::Sys::SceneMgr::sInstance->mCurrentScene->mDbgHeap = endv::heap::Get<SceneDbgHeapKey>();
+        /* Populate DbgHeap for the scene. For prod we will use a smaller heap. */
+        Lp::Sys::SceneMgr::sInstance->mCurrentScene->mDbgHeap = endv::heap::s_IsProd ? 
+            endv::heap::Get<SceneDbgHeapKeyProd>() : 
+            endv::heap::Get<SceneDbgHeapKey>();
 
         /* If we are in the PlayerViewer scene, overwrite the clear color. */
         auto sceneInfo = Lp::Utl::getSceneInfo(Lp::Sys::SceneMgr::sInstance->mCurrentSceneId, false);
-        if(sceneInfo != nullptr && std::strcmp(sceneInfo->mName, "PlayerViewer") == 0) {
+        if(sceneInfo != nullptr && std::strcmp(sceneInfo->mName, "PlayerViewer") == 0 && CameraAnimResourceLoad::s_EnablePlayerViewerBlueBG) {
             Lp::Utl::getGfxLayer3D(Cmn::GfxUtl::getGfxMgr()->getLyrIdx_3D_Main())->mClearColor = sead::Color4f::cBlue;
         }
     }
 
     static constexpr size_t s_AdditionalMemForDynamicTextureAllocator = 0x200'00000;
     void OnSetHeapInfo(Lp::Sys::HeapInfo* heapInfo) {
-        /* Reserve more memory for agl's dynamic texture allocator, which is allocated from HeapGroup Gfx heap. */
-        heapInfo->mGfxSize += endv::s_AdditionalMemForDynamicTextureAllocator;
+        /* Query the available memory size to determine if we are in prod. */
+        nn::os::MemoryInfo info;
+        nn::os::QueryMemoryInfo(&info);
+
+        endv::heap::s_IsProd = info.availaible_size <= (4ULL * 0x40000000ULL); // if <= 4gb, we're prod (dev is at least 6)
+        Logging.Log("Available size: %08llx; Using %s config.", info.availaible_size, endv::heap::s_IsProd ? "prod" : "dev");
+
+        /* Reserve more memory for agl's dynamic texture allocator, which is allocated from HeapGroup Gfx heap. 
+           This is only done in dev builds, on prod we do not have enough ram for this. */
+        if(!endv::heap::s_IsProd) heapInfo->mGfxSize += endv::s_AdditionalMemForDynamicTextureAllocator;
     }
 
     void OnOverwriteFrameworkCreateArg(sead::GameFrameworkNx::CreateArg* arg) {
@@ -702,8 +772,9 @@ namespace endv {
     void OnCreateGsysCreateArg(gsys::SystemTask::CreateArg& arg) {
         /* Create screenshot mgr as *Viewer scenes use it. */
         arg.mCreateScreenshotMgr = true;
-        /* Bump up the dynamic texture allocator's heap size as the 3x screenshots in *Viewer scenes require it. */
-        arg.mDynamicTextureAllocatorMemSize += endv::s_AdditionalMemForDynamicTextureAllocator;
+        /* Bump up the dynamic texture allocator's heap size as the 3x screenshots in *Viewer scenes require it. 
+           This is only done in dev builds, on prod we do not have enough ram for this. */
+        if(!endv::heap::s_IsProd) arg.mDynamicTextureAllocatorMemSize += endv::s_AdditionalMemForDynamicTextureAllocator;
     }
 
     void OnPostRootTaskCreateVariousParts() {
@@ -737,7 +808,7 @@ namespace endv {
         /* Initialize Lp's Dbg heap. */
         auto& dbgHeap = SEAD_INSTANCE(Lp::Sys::HeapGroup)->mHeaps[Lp::Sys::HeapGroup::Group_Dbg];
         if(dbgHeap == nullptr) {
-            dbgHeap = endv::heap::Get<HeapGroupDbgHeapKey>();
+            dbgHeap = endv::getDbgHeap();
 
             // auto others = SEAD_INSTANCE(Lp::Sys::HeapGroup)->mHeaps[Lp::Sys::HeapGroup::Group_Others];
             // dbgHeap = sead::ExpHeap::create(

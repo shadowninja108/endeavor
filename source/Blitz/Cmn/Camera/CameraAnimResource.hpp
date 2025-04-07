@@ -6,6 +6,6 @@
 
 namespace Cmn {
     struct CameraAnimResource {
-        void loadImpl(Lp::Sys::ModelArc*, sead::SafeString const&, sead::SafeString const*, int, bool);
+        bool loadImpl(Lp::Sys::ModelArc*, sead::SafeString const&, sead::SafeString const*, int, bool);
     };
 }

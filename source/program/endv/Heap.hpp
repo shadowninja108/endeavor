@@ -5,10 +5,14 @@
 #include <sead/heap/seadExpHeap.h>
 
 namespace endv::heap {
+    extern bool s_IsProd;
+
     namespace impl {
         /* Leave the game enough room for it's own work. */
-        static constexpr size_t s_RequiredHeapLeft = 0x7A7B0000 + sizeof(sead::ExpHeap);
-
+        //static constexpr size_t s_RequiredHeapLeft = 0x7A7B0000 + sizeof(sead::ExpHeap);
+        static constexpr size_t s_HeapSize = 400 * 1024 * 1024;
+        static constexpr size_t s_HeapSizeProd = 52 * 1024 * 1024;
+        
         inline sead::Heap*& GetRootRef() {
             static sead::Heap* root = nullptr;
             return root;
@@ -30,14 +34,17 @@ namespace endv::heap {
 
         Logging.Log("parent size: %08llx parent free size: %08llx", heap->getSize(), heap->getFreeSize());
 
+        /* Choose the appropriate heap size. */
+        size_t heapSize = s_IsProd ? impl::s_HeapSizeProd : impl::s_HeapSize;
+        Logging.Log("Using %s heap config", s_IsProd ? "prod" : "dev");
 
         /* Ensure we leave enough room for the game to do it's thang. */
         auto room = heap->getMaxAllocatableSize(8);
-        EXL_ABORT_UNLESS(room > impl::s_RequiredHeapLeft);
+        EXL_ABORT_UNLESS(room > heapSize);
 
         /* Create root heap. */
         sead::Heap* root = sead::ExpHeap::tryCreate(
-            room - impl::s_RequiredHeapLeft, 
+            heapSize, 
             "endv::RootHeap", 
             heap, 
             8, 
