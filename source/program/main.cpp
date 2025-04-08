@@ -57,6 +57,7 @@
 #include <Blitz/Scene/JintTest.hpp>
 #include <Blitz/Scene/NisdTest.hpp>
 #include <Blitz/Scene/Viewer/PlayerViewer/Scene.hpp>
+#include <Blitz/Scene/Boot/Scene.hpp>
 
 #include "endv/Cstm/Scene.hpp"
 #include "endv/Version.hpp"
@@ -300,12 +301,16 @@ namespace endv {
             endv::heap::Get<endv::HeapGroupDbgHeapKeyProd>() : 
             endv::heap::Get<endv::HeapGroupDbgHeapKey>();
     }
+    static bool s_EnableDbgTextWriter = true;
+    static bool s_EnablePlayerViewerBlueBG = false;
+    static bool s_UseShopForFieldFix = false;
+    static Game::FilmingSupporter* s_FilmingSupporter = nullptr;
+    static bool s_IsFixedAim = false;
 }
 
-HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
-    inline static bool s_EnableDbgTextWriter = true;
+HOOK_DEFINE_TRAMPOLINE(BootSceneEnter) {
     static void OnEnableDbgTextWriterChanged() {
-        if(s_EnableDbgTextWriter) {
+        if(endv::s_EnableDbgTextWriter) {
             Logging.Log("Enabling DbgTextWriter...");
             //SEAD_INSTANCE(Lp::Sys::DbgTextWriter)->pauseDraw(true);
         } else {
@@ -314,18 +319,16 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
         }
     }
 
-    inline static bool s_EnablePlayerViewerBlueBG = false;
     static void OnEnablePlayerViewerBlueBGChanged() {
-        if(s_EnablePlayerViewerBlueBG) {
+        if(endv::s_EnablePlayerViewerBlueBG) {
             Logging.Log("Enabling PlayerViewer Blue BG...");
         } else {
             Logging.Log("Disabling PlayerViewer Blue BG...");
         }
     }
 
-    inline static bool s_UseShopForFieldFix = false;
     static void OnUseShopForFieldFixChanged() {
-        if(s_UseShopForFieldFix) {
+        if(endv::s_UseShopForFieldFix) {
             Logging.Log("Enabling Use Shop For Field Fix...");
         } else {
             Logging.Log("Disabling Use Shop For Field Fix...");
@@ -399,23 +402,9 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
         }
         formatter.endHash();
     }
-
-    static bool Callback(Cmn::CameraAnimResource* self, Lp::Sys::ModelArc* arc, sead::SafeString const& str1, sead::SafeString const* str2, int a, bool b) {
-        Logging.Log("Cmn::CameraAnimResourceLoad::loadImpl");
-        endv::LogStackTrace();
-
-        auto gfxMgr = reinterpret_cast<Game::GfxMgr*>(Cmn::GfxUtl::getGfxMgr());
-        auto fieldEnvSet = gfxMgr->mFieldEnvSet;
-        if(fieldEnvSet != nullptr) {
-            //PrintParam(fieldEnvSet);
-        }
-        /* TODO: fix sead RTTI... */
-        // Logging.Log("Hour: %d", static_cast<int>(sead::DynamicCast<Cmn::SceneBase>(Lp::Utl::getCurScene())->mGfxMgr->mHour));
-        // if(str2 != nullptr)
-        //     Logging.Log("%s %s", str1.cstr(), str2->cstr());
-        // else
-        //     Logging.Log("%s", str1.cstr());
-        // Orig(self, arc, str1, str2, a, b);
+    
+    static void Callback(Boot::Scene* self) {
+        Logging.Log("Boot::Scene::sceneEnter");
 
         sead::ScopedCurrentHeapSetter heap(endv::getDbgHeap());
         static int ivalue = 420;
@@ -467,24 +456,24 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
             page->addItem(
                 Cmn::DbgMenuItemBool::Create(
                     sead::SafeString("DbgTextWriter"),
-                    s_EnableDbgTextWriter,
+                    endv::s_EnableDbgTextWriter,
                     OnEnableDbgTextWriterChanged
                 )
             );
             page->addItem(
                 Cmn::DbgMenuItemBool::Create(
                     sead::SafeString("PlayerViewer Blue BG"),
-                    s_EnablePlayerViewerBlueBG,
+                    endv::s_EnablePlayerViewerBlueBG,
                     OnEnablePlayerViewerBlueBGChanged
                 )
             );
             if(!Lp::Sys::ModelArc::checkResExist("TestfieldDummy00")){
-                s_UseShopForFieldFix = true; // default to shop if a replacement field is not found.
+                endv::s_UseShopForFieldFix = true; // default to shop if a replacement field is not found.
             }
             page->addItem(
                 Cmn::DbgMenuItemBool::Create(
                     sead::SafeString("Use Shop For Field Fix"),
-                    s_UseShopForFieldFix,
+                    endv::s_UseShopForFieldFix,
                     OnUseShopForFieldFixChanged
                 )
             );
@@ -495,39 +484,63 @@ HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
                 )
             );
         }
-        return Orig(self, arc, str1, str2, a, b);
+
+        Orig(self);
     }
 };
 
-static Game::FilmingSupporter* sFilmingSupporter;
-static bool sIsFixedAim = false;
+HOOK_DEFINE_TRAMPOLINE(CameraAnimResourceLoad) {
+    static bool Callback(Cmn::CameraAnimResource* self, Lp::Sys::ModelArc* arc, sead::SafeString const& str1, sead::SafeString const* str2, int a, bool b) {
+        Logging.Log("Cmn::CameraAnimResourceLoad::loadImpl");
+        endv::LogStackTrace();
+
+        auto gfxMgr = reinterpret_cast<Game::GfxMgr*>(Cmn::GfxUtl::getGfxMgr());
+        auto fieldEnvSet = gfxMgr->mFieldEnvSet;
+        if(fieldEnvSet != nullptr) {
+            PrintParam(fieldEnvSet);
+        }
+        /* TODO: fix sead RTTI... */
+        // Logging.Log("Hour: %d", static_cast<int>(sead::DynamicCast<Cmn::SceneBase>(Lp::Utl::getCurScene())->mGfxMgr->mHour));
+        // if(str2 != nullptr)
+        //     Logging.Log("%s %s", str1.cstr(), str2->cstr());
+        // else
+        //     Logging.Log("%s", str1.cstr());
+        // Orig(self, arc, str1, str2, a, b);
+    }
+};
 
 HOOK_DEFINE_TRAMPOLINE(MainMgrEnter) {
     static void OnAimModeChanged() {
-        if(sFilmingSupporter) sFilmingSupporter->changeMode_(sIsFixedAim ? Game::FilmingSupporter::AimMode_FixedAim : Game::FilmingSupporter::AimMode_None);
+        if(endv::s_FilmingSupporter) {
+            endv::s_FilmingSupporter->changeMode_(endv::s_IsFixedAim ? 
+                Game::FilmingSupporter::AimMode_FixedAim : 
+                Game::FilmingSupporter::AimMode_None
+            );
+        }
     }
     static void Callback(Game::MainMgr* self) {
         Orig(self);
-        if(sFilmingSupporter == nullptr) {
+        if(endv::s_FilmingSupporter == nullptr) {
             sead::ScopedCurrentHeapSetter heap(endv::getDbgHeap());
 
-            sIsFixedAim = false;
+            endv::s_IsFixedAim = false;
 
-            sFilmingSupporter = new Game::FilmingSupporter();
-            sFilmingSupporter->enter();
+            endv::s_FilmingSupporter = new Game::FilmingSupporter();
+            endv::s_FilmingSupporter->enter();
 
+            /* Also add our options for FixedAim */
             auto page = Cmn::FindOrCreateDbgMenuPage(sead::SafeString("Filming"), true);
             page->addItem(
                 Cmn::DbgMenuItemBool::Create(
                     sead::SafeString("[Endeavor] FixedAim"),
-                    sIsFixedAim,
+                    endv::s_IsFixedAim,
                     OnAimModeChanged
                 )
             );
             page->addItem(
                 Cmn::DbgMenuItemValue::Create<int>(
                     sead::SafeString("[Endeavor] Focus Player"),
-                    sFilmingSupporter->mPlayerId,
+                    endv::s_FilmingSupporter->mPlayerId,
                     -1,
                     9
                 )
@@ -538,15 +551,18 @@ HOOK_DEFINE_TRAMPOLINE(MainMgrEnter) {
 
 HOOK_DEFINE_TRAMPOLINE(MainMgrCalcGameFrame) {
     static void Callback(Game::MainMgr* self) {
-        if(sFilmingSupporter != nullptr) {
-            sFilmingSupporter->calc();
-            if(sIsFixedAim) {
+        if(endv::s_FilmingSupporter) {
+            endv::s_FilmingSupporter->calc();
+
+            if(endv::s_IsFixedAim) {
+                /* If we're in fixed aim mode, we have to manually call calc on the dbg camera 
+                   since code for it is not present */
                 int i = Cmn::GfxUtl::getGfxMgr()->getLyrIdx_3D_Main();
                 auto mgr = Lp::Sys::DbgCameraMgr::sInstance;
-                if(mgr->mLayerNum > i && mgr->mLayerCameras[i] != nullptr) {
+                if(mgr->mLayerNum > i && mgr->mLayerCameras[i] != nullptr)
                     mgr->mLayerCameras[i]->calc(true);
-                }
             }
+
         }
         Orig(self);
     }
@@ -558,10 +574,10 @@ HOOK_DEFINE_TRAMPOLINE(MainMgrExit) {
         page->removeItem(item);
     }
     static void Callback(Game::MainMgr* self) {
-        if(sFilmingSupporter != nullptr) {
+        if(endv::s_FilmingSupporter) {
             sead::ScopedCurrentHeapSetter heap(endv::getDbgHeap());
 
-            // Additional cleanup since dtor is not present
+            /* FilmingSupporter dtor is not present, so we have to manually remove the dbgMenu items it adds. */
             auto page = Cmn::FindOrCreateDbgMenuPage(sead::SafeString("Filming"), true);
             deleteItem(page, sead::SafeString("Clear"));
             deleteItem(page, sead::SafeString("Hide Layout"));
@@ -570,10 +586,10 @@ HOOK_DEFINE_TRAMPOLINE(MainMgrExit) {
             deleteItem(page, sead::SafeString("[Endeavor] FixedAim"));
             deleteItem(page, sead::SafeString("[Endeavor] Focus Player"));
 
-            delete sFilmingSupporter;
-            sFilmingSupporter = nullptr;
+            delete endv::s_FilmingSupporter;
+            endv::s_FilmingSupporter = nullptr;
 
-            sIsFixedAim = false;
+            endv::s_IsFixedAim = false;
 
         }
         Orig(self);
@@ -582,10 +598,15 @@ HOOK_DEFINE_TRAMPOLINE(MainMgrExit) {
 
 HOOK_DEFINE_TRAMPOLINE(LayerGetCamera) {
     static sead::Camera* Callback(const agl::lyr::Layer* layer) {
-         if(sIsFixedAim && sFilmingSupporter && layer->mId == Cmn::GfxUtl::getGfxMgr()->getLyrIdx_3D_Main()) {
+        /* If we are in fixed aim mode, and we are the main layer, return the dbg camera. */
+        if(endv::s_IsFixedAim && endv::s_FilmingSupporter && layer->mId == Cmn::GfxUtl::getGfxMgr()->getLyrIdx_3D_Main()) {
+
             auto mgr = Lp::Sys::DbgCameraMgr::sInstance;
             int i = layer->mId;
-            if(mgr->mLayerNum > i && mgr->mLayerCameras[i] != nullptr) return &mgr->mLayerCameras[i]->mCamera;
+
+            if(mgr->mLayerNum > i && mgr->mLayerCameras[i] != nullptr) 
+                return &mgr->mLayerCameras[i]->mCamera;
+
         }
         return Orig(layer);
     }
@@ -614,7 +635,7 @@ HOOK_DEFINE_TRAMPOLINE(LpDbgTextWriterEntry) {
         Lp::Sys::DbgTextWriter::Info* info
     ) {
         /* If the text writer is enabled, just fallthrough. */
-        if(CameraAnimResourceLoad::s_EnableDbgTextWriter) {
+        if(endv::s_EnableDbgTextWriter) {
             Orig(writer, layerId, pos, ex, info);
             return;
         }
@@ -668,7 +689,12 @@ HOOK_DEFINE_INLINE(FieldLoadModerArcPtr) {
         Cmn::ActorDBData* actorDBData = reinterpret_cast<Cmn::ActorDBData*>(ctx->X[1] - 0xB8);
         if( !Lp::Sys::ModelArc::checkResExist(actorDBData->mResName)){
             Logging.Log("Missing Field: %s", actorDBData->mResName.mStringTop);
-            const char *name = (CameraAnimResourceLoad::s_UseShopForFieldFix) ? "Fld_Room_Gear" : "TestfieldDummy00";
+            const char *name = (actorDBData->mResName == "TestField1150" ? 
+                "Fld_Ditch01" : (endv::s_UseShopForFieldFix ? 
+                    "Fld_Room_Gear" : 
+                    "TestfieldDummy00"
+                )
+            );
             actorDBData->mResName = sead::SafeString(name);
             actorDBData->mJmpName = sead::SafeString(name);
             actorDBData->mFmdbName = sead::SafeString(name);
@@ -690,6 +716,7 @@ HOOK_DEFINE_INLINE(ObjCreateModelArc) {
 
 HOOK_DEFINE_INLINE(CollisionFix) {
     static void Callback(exl::hook::InlineCtx* ctx) {
+        /* Lifts that have our replaced model have no collision, but game assumes they do. */
         Game::Lift* obj = reinterpret_cast<Game::Lift*>(ctx->X[19]);
         if(obj->getBlock(0) == nullptr) ctx->W[0] = 0;
     }
@@ -697,12 +724,15 @@ HOOK_DEFINE_INLINE(CollisionFix) {
 
 HOOK_DEFINE_INLINE(BulletMgrCreateActorsRocketFix) {
     static void Callback(exl::hook::InlineCtx* ctx) {
+        /* Mimic 3.1.0 behavior by adding 1 to RocketNozzle bullet batch count in the same place it does for Gachihoko */
         *reinterpret_cast<int*>(ctx->X[29] - 0x4A0 + 0x2E4) = 1;
     }
 };
 
 HOOK_DEFINE_TRAMPOLINE(CtrlMgrChangeCtrlJoy) {
     static void Callback(Lp::Sys::CtrlMgr* self, int ctrlType, int ctrlId) {
+        /* When a controller disconnects, ctrlId may for some reason be > 8. 
+           On prod it works, but here it has an assert. Simulate prod behavior. */
         Orig(self, ctrlType, (ctrlId <= 8 ? ctrlId : 0));
     }
 };
@@ -746,7 +776,7 @@ namespace endv {
 
         /* If we are in the PlayerViewer scene, overwrite the clear color. */
         auto sceneInfo = Lp::Utl::getSceneInfo(Lp::Sys::SceneMgr::sInstance->mCurrentSceneId, false);
-        if(sceneInfo != nullptr && std::strcmp(sceneInfo->mName, "PlayerViewer") == 0 && CameraAnimResourceLoad::s_EnablePlayerViewerBlueBG) {
+        if(sceneInfo != nullptr && std::strcmp(sceneInfo->mName, "PlayerViewer") == 0 && endv::s_EnablePlayerViewerBlueBG) {
             Lp::Utl::getGfxLayer3D(Cmn::GfxUtl::getGfxMgr()->getLyrIdx_3D_Main())->mClearColor = sead::Color4f::cBlue;
         }
     }
@@ -965,7 +995,11 @@ extern "C" void exl_main(void* x0, void* x1) {
     MainMgrCalcGameFrame::InstallAtFuncPtr(&Game::MainMgr::calcGameFrame);
     MainMgrExit::InstallAtFuncPtr(&Game::MainMgr::exit);
 
-    CameraAnimResourceLoad::InstallAtFuncPtr(&Cmn::CameraAnimResource::loadImpl);
+    /* Boot scene hook where we init our dbgmenu entry */
+    BootSceneEnter::InstallAtFuncPtr(&Boot::Scene::sceneEnter); 
+    //CameraAnimResourceLoad::InstallAtFuncPtr(&Cmn::CameraAnimResource::loadImpl);
+
+    /* Hook to enable/disable the dbgtextwriter */
     LpDbgTextWriterEntry::InstallAtFuncPtr(&Lp::Sys::DbgTextWriter::entryCmn);
 
     /* Hooks for missing model replacement */
